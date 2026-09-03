@@ -103,3 +103,31 @@ test_that("the per-chromosome embedding is built when an annotation is given", {
   expect_named(cc, c("P", "Q", "stdev"))
   expect_equal(nrow(cc$P) , 60)
 })
+
+test_that("the retired skymap.feature slot fails with an explanation", {
+  ## Six analysis scripts still reference this slot, so the error has to say
+  ## what happened rather than just "unknown slot".
+  fit <- sim_fit()$fit
+  expect_error(SkymapUMAP(fit, slot = "skymap.feature"), "no longer exists")
+  expect_error(SkymapFindNeighbors(fit, slot = "skymap.feature"), "no longer exists")
+  expect_error(SkymapUMAP(fit, slot = "nonsense"), "Unknown slot")
+})
+
+test_that("r3 and r4 are validated against the available rank", {
+  set.seed(11); sim <- polarisSimulate(n = 150, g = 50, p = 60, r = 4)
+  expect_error(Polaris(sim$X, sim$Y, r3 = 500, x.sds = 0, verbose = FALSE),
+               "cannot exceed")
+  expect_error(Polaris(sim$X, sim$Y, r3 = 0, x.sds = 0, verbose = FALSE),
+               "at least 1")
+})
+
+test_that("n.pc is clamped against both U and V when r3 != r4", {
+  set.seed(11); sim <- polarisSimulate(n = 200, g = 60, p = 70, r = 5)
+  fit <- Polaris(sim$X, sim$Y, r3 = 5, r4 = 3, x.sds = 0, verbose = FALSE)
+  expect_equal(ncol(fit$skymap.U), 5)
+  expect_equal(ncol(fit$skymap.V), 3)
+  ## slicing V by ncol(U) would be out of bounds
+  out <- SkymapSimScore(fit)
+  expect_length(out$concordance, 200)
+  expect_false(anyNA(out$concordance))
+})

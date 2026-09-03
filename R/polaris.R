@@ -187,6 +187,15 @@ Polaris <- function(X, Y,
 
   if (is.null(r3)) r3 <- min(r1, r2)
   if (is.null(r4)) r4 <- min(r1, r2)
+  ## r3 and r4 index prod.svd, which has only min(r1, r2) components. Unchecked,
+  ## an over-large r3 produced NA columns rather than an error.
+  avail <- length(prod.svd$d)
+  if (r3 > avail || r4 > avail)
+    stop(sprintf(paste0("r3 = %d and r4 = %d cannot exceed the %d components ",
+                        "available from the joint decomposition (min(r1, r2))."),
+                 r3, r4, avail), call. = FALSE)
+  if (r3 < 1L || r4 < 1L)
+    stop("r3 and r4 must be at least 1.", call. = FALSE)
 
   skymap.cell <- cbind(prod.svd$u[, seq_len(r3), drop = FALSE],
                        prod.svd$v[, seq_len(r4), drop = FALSE])

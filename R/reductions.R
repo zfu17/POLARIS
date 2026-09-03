@@ -11,6 +11,16 @@
   valid <- .skymap_slots()
   if (identical(slot, "all")) slot <- valid
   bad <- setdiff(slot, valid)
+  if ("skymap.feature" %in% bad)
+    stop(paste0("The 'skymap.feature' slot no longer exists. It was the stacked ",
+                "gene-and-feature map, rbind(P * sqrt(nrow(P)), Q * sqrt(nrow(Q))), ",
+                "and its construction was commented out of Polaris() before this ",
+                "code became a package, so no recent fit contains it. Use ",
+                "'skymap.P' and 'skymap.Q' separately, or SkymapUMAP.Chr() / ",
+                "SkymapFindNeighbors.Chr() for the per-chromosome maps, which do ",
+                "stack the two. If you need the combined map restored as a slot, ",
+                "that is a deliberate API decision, not an oversight."),
+         call. = FALSE)
   if (length(bad))
     stop(sprintf("Unknown slot(s): %s. Choose from %s, or \"all\".",
                  paste(bad, collapse = ", "), paste(valid, collapse = ", ")),

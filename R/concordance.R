@@ -63,11 +63,15 @@ SkymapSimScore <- function(skymap,
   U <- as.matrix(skymap$skymap.U)
   V <- as.matrix(skymap$skymap.V)
 
-  if (is.null(n.pc)) n.pc <- ncol(U)
-  if (n.pc > ncol(U)) {
-    warning(sprintf("n.pc = %d exceeds the %d available components; using %d.",
-                    n.pc, ncol(U), ncol(U)), call. = FALSE)
-    n.pc <- ncol(U)
+  ## Clamp against BOTH factors: r3 and r4 are separately settable in Polaris(),
+  ## so ncol(U) and ncol(V) can differ and slicing V by ncol(U) would go out of
+  ## bounds.
+  avail <- min(ncol(U), ncol(V))
+  if (is.null(n.pc)) n.pc <- avail
+  if (n.pc > avail) {
+    warning(sprintf("n.pc = %d exceeds the %d paired components available; using %d.",
+                    n.pc, avail, avail), call. = FALSE)
+    n.pc <- avail
   }
   if (n.pc < 1L) stop("n.pc must be at least 1.", call. = FALSE)
   ## drop = FALSE matters: with n.pc = 1 a plain [ , 1:1 ] collapses to a vector
