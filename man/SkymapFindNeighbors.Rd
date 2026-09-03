@@ -34,8 +34,11 @@ BiocNeighbors expects, e.g. \code{"Cosine"}, which differs from uwot's
 \item{...}{Further arguments for \code{\link[BiocNeighbors:findKNN]{BiocNeighbors::findKNN()}}.}
 }
 \value{
-The \code{skymap} with an \verb{nb.<slot>} list added per slot, each carrying
-\code{index} and \code{distance} matrices with rownames taken from the embedding.
+The \code{skymap} with results added under \code{skymap$NN.graph}, one entry
+per slot named \verb{<slot>.nb}, each carrying \code{index} and \code{distance} matrices
+with rownames taken from the embedding. Repeated calls accumulate, with a
+same-named entry replaced, matching the storage contract the analysis
+scripts read (for example \code{skymap$NN.graph$skymap.cell.nb}).
 }
 \description{
 Nearest-neighbor graphs on skymap embeddings
@@ -45,6 +48,6 @@ set.seed(1)
 sim <- polarisSimulate(n = 150, g = 50, p = 60, r = 4)
 fit <- Polaris(sim$X, sim$Y, x.sds = 0, verbose = FALSE)
 fit <- SkymapFindNeighbors(fit, n.neighbors = 10, verbose = FALSE)
-dim(fit$nb.skymap.cell$index)
+dim(fit$NN.graph$skymap.cell.nb$index)
 
 }

@@ -131,3 +131,40 @@ test_that("n.pc is clamped against both U and V when r3 != r4", {
   expect_length(out$concordance, 200)
   expect_false(anyNA(out$concordance))
 })
+
+test_that("UMAP and neighbor results use the $UMAPs / $NN.graph contract", {
+  ## The analysis scripts read skymap$UMAPs$<slot>.UMAP and
+  ## skymap$NN.graph$<slot>.nb (PLOT_motif_final.R:136, PLOT_HVG.R:43,
+  ## PLOT4_nbh_distance.R:46, validation_linkage_methods.R:137). A flat naming
+  ## scheme would silently break all of them.
+  set.seed(11); sim <- polarisSimulate(n = 150, g = 50, p = 60, r = 4)
+  fit <- Polaris(sim$X, sim$Y, x.sds = 0, verbose = FALSE)
+
+  fit <- SkymapUMAP(fit, n_neighbors = 15, verbose = FALSE)
+  expect_true(is.list(fit$UMAPs))
+  expect_true("skymap.cell.UMAP" %in% names(fit$UMAPs))
+  expect_equal(nrow(fit$UMAPs$skymap.cell.UMAP), 150)
+
+  fit <- SkymapFindNeighbors(fit, n.neighbors = 10, verbose = FALSE)
+  expect_true(is.list(fit$NN.graph))
+  expect_true("skymap.cell.nb" %in% names(fit$NN.graph))
+  expect_equal(nrow(fit$NN.graph$skymap.cell.nb$index), 150)
+
+  ## repeated calls must ACCUMULATE, not replace
+  fit <- SkymapUMAP(fit, slot = "skymap.U", n_neighbors = 15, verbose = FALSE)
+  expect_true(all(c("skymap.cell.UMAP", "skymap.U.UMAP") %in% names(fit$UMAPs)))
+  fit <- SkymapFindNeighbors(fit, slot = "skymap.U", n.neighbors = 10,
+                             verbose = FALSE)
+  expect_true(all(c("skymap.cell.nb", "skymap.U.nb") %in% names(fit$NN.graph)))
+})
+
+test_that("the per-chromosome verbs use the nested contract too", {
+  set.seed(11); sim <- polarisSimulate(n = 200, g = 60, p = 90, r = 5)
+  fit <- Polaris(sim$X, sim$Y, gene.chr.ref = sim$anno, x.sds = 0,
+                 verbose = FALSE)
+  fit <- SkymapFindNeighbors.Chr(fit, n.neighbors = 10, verbose = FALSE)
+  expect_true("skymap.feature.chr.nb" %in% names(fit$NN.graph))
+  expect_true("chr1" %in% names(fit$NN.graph$skymap.feature.chr.nb))
+  expect_named(fit$NN.graph$skymap.feature.chr.nb$chr1,
+               c("gene.to.feature", "feature.to.gene"))
+})

@@ -30,7 +30,10 @@ Note \code{metric} here takes uwot's lowercase spelling, e.g. \code{"cosine"}.}
 \item{...}{Further arguments for \code{\link[uwot:umap]{uwot::umap()}}.}
 }
 \value{
-The \code{skymap} with a \verb{umap.<slot>} \code{data.frame} added for each slot.
+The \code{skymap} with results added under \code{skymap$UMAPs}, one
+\code{data.frame} per slot named \verb{<slot>.UMAP}. Repeated calls accumulate rather
+than replace, which is the storage contract the analysis scripts expect
+(for example \code{skymap$UMAPs$skymap.cell.UMAP}).
 }
 \description{
 UMAP of a skymap embedding
@@ -40,6 +43,6 @@ set.seed(1)
 sim <- polarisSimulate(n = 150, g = 50, p = 60, r = 4)
 fit <- Polaris(sim$X, sim$Y, x.sds = 0, verbose = FALSE)
 fit <- SkymapUMAP(fit, n_neighbors = 15, verbose = FALSE)
-head(fit$umap.skymap.cell)
+head(fit$UMAPs$skymap.cell.UMAP)
 
 }

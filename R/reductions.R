@@ -43,14 +43,17 @@
 #' @param verbose Report progress.
 #' @param ... Further arguments for [uwot::umap()].
 #'
-#' @return The `skymap` with a `umap.<slot>` `data.frame` added for each slot.
+#' @return The `skymap` with results added under `skymap$UMAPs`, one
+#'   `data.frame` per slot named `<slot>.UMAP`. Repeated calls accumulate rather
+#'   than replace, which is the storage contract the analysis scripts expect
+#'   (for example `skymap$UMAPs$skymap.cell.UMAP`).
 #'
 #' @examples
 #' set.seed(1)
 #' sim <- polarisSimulate(n = 150, g = 50, p = 60, r = 4)
 #' fit <- Polaris(sim$X, sim$Y, x.sds = 0, verbose = FALSE)
 #' fit <- SkymapUMAP(fit, n_neighbors = 15, verbose = FALSE)
-#' head(fit$umap.skymap.cell)
+#' head(fit$UMAPs$skymap.cell.UMAP)
 #'
 #' @export
 SkymapUMAP <- function(skymap,
@@ -62,20 +65,22 @@ SkymapUMAP <- function(skymap,
   .check_skymap(skymap)
   slot <- .resolve_slots(slot, skymap)
 
-  for (s in slot) {
+  new <- lapply(slot, function(s) {
     if (isTRUE(verbose)) message("UMAP on ", s, ".")
     m <- as.matrix(skymap[[s]])
     nn <- min(n_neighbors, nrow(m) - 1L)
     if (nn < 2L)
       stop(sprintf("%s has only %d rows, too few for a UMAP.", s, nrow(m)),
            call. = FALSE)
-    co <- uwot::umap(X = m, n_components = n_components, n_neighbors = nn,
-                     metric = metric, min_dist = min_dist, ...)
-    co <- as.data.frame(co)
+    co <- as.data.frame(uwot::umap(X = m, n_components = n_components,
+                                   n_neighbors = nn, metric = metric,
+                                   min_dist = min_dist, ...))
     rownames(co) <- rownames(m)
     colnames(co) <- paste0("UMAP_", seq_len(ncol(co)))
-    skymap[[paste0("umap.", s)]] <- co
-  }
+    co
+  })
+  names(new) <- paste0(slot, ".UMAP")
+  skymap$UMAPs <- .merge_slot(skymap$UMAPs, new)
   skymap
 }
 
@@ -91,9 +96,9 @@ SkymapUMAP <- function(skymap,
 #' @param verbose Report progress.
 #' @param ... Further arguments for [uwot::umap()].
 #'
-#' @return The `skymap` with `umap.feature.chr`, a named list of
-#'   `data.frame`s each carrying a `feature_type` column marking rows as `gene`
-#'   or `feature`.
+#' @return The `skymap` with `skymap$UMAPs$skymap.feature.chr.UMAP`, a list
+#'   keyed by chromosome, each entry a `data.frame` carrying a `feature_type`
+#'   column marking rows as `gene` or `feature`.
 #'
 #' @details
 #' This function previously assumed `skymap.feature.chr[[chr]]` was a single
@@ -124,8 +129,21 @@ SkymapUMAP.Chr <- function(skymap, chr = "all",
     co$feature_type <- type
     co
   })
-  skymap$umap.feature.chr <- out
+  skymap$UMAPs[["skymap.feature.chr.UMAP"]] <-
+    .merge_slot(skymap$UMAPs[["skymap.feature.chr.UMAP"]], out)
   skymap
+}
+
+#' Accumulate named results into an existing slot list
+#'
+#' Repeated calls to the UMAP and neighbor verbs add to what is already stored
+#' rather than replacing it, with a same-named entry overwritten. This is the
+#' contract the pre-package code established and that the analysis scripts read.
+#' @noRd
+.merge_slot <- function(existing, new) {
+  if (is.null(existing)) return(new)
+  keep <- setdiff(names(existing), names(new))
+  c(existing[keep], new)
 }
 
 #' @noRd

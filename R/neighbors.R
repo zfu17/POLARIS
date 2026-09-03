@@ -12,15 +12,18 @@
 #' @param verbose Report progress.
 #' @param ... Further arguments for [BiocNeighbors::findKNN()].
 #'
-#' @return The `skymap` with an `nb.<slot>` list added per slot, each carrying
-#'   `index` and `distance` matrices with rownames taken from the embedding.
+#' @return The `skymap` with results added under `skymap$NN.graph`, one entry
+#'   per slot named `<slot>.nb`, each carrying `index` and `distance` matrices
+#'   with rownames taken from the embedding. Repeated calls accumulate, with a
+#'   same-named entry replaced, matching the storage contract the analysis
+#'   scripts read (for example `skymap$NN.graph$skymap.cell.nb`).
 #'
 #' @examples
 #' set.seed(1)
 #' sim <- polarisSimulate(n = 150, g = 50, p = 60, r = 4)
 #' fit <- Polaris(sim$X, sim$Y, x.sds = 0, verbose = FALSE)
 #' fit <- SkymapFindNeighbors(fit, n.neighbors = 10, verbose = FALSE)
-#' dim(fit$nb.skymap.cell$index)
+#' dim(fit$NN.graph$skymap.cell.nb$index)
 #'
 #' @export
 SkymapFindNeighbors <- function(skymap,
@@ -38,8 +41,8 @@ SkymapFindNeighbors <- function(skymap,
     .knn(as.matrix(skymap[[s]]), n.neighbors, metric, ...)
   }, mc.cores, "neighbor graphs")
 
-  names(res) <- paste0("nb.", slot)
-  for (nm in names(res)) skymap[[nm]] <- res[[nm]]
+  names(res) <- paste0(slot, ".nb")
+  skymap$NN.graph <- .merge_slot(skymap$NN.graph, res)
   skymap
 }
 
@@ -55,8 +58,8 @@ SkymapFindNeighbors <- function(skymap,
 #' @param mc.cores Cores, one chromosome per core.
 #' @param verbose Report progress.
 #'
-#' @return The `skymap` with `nb.feature.chr`, a named list holding
-#'   `gene.to.feature` and `feature.to.gene` for each chromosome.
+#' @return The `skymap` with `skymap$NN.graph$skymap.feature.chr.nb`, a list
+#'   keyed by chromosome, each holding `gene.to.feature` and `feature.to.gene`.
 #'
 #' @details
 #' Rewritten for the `list(P, Q, stdev)` layout that `Polaris()` stores. The
@@ -86,7 +89,8 @@ SkymapFindNeighbors.Chr <- function(skymap, chr = "all",
   }, mc.cores, "chromosomes")
 
   names(res) <- names(feat)
-  skymap$nb.feature.chr <- res
+  skymap$NN.graph[["skymap.feature.chr.nb"]] <-
+    .merge_slot(skymap$NN.graph[["skymap.feature.chr.nb"]], res)
   skymap
 }
 

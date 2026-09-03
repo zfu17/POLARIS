@@ -27,9 +27,9 @@ SkymapUMAP.Chr(
 \item{...}{Further arguments for \code{\link[uwot:umap]{uwot::umap()}}.}
 }
 \value{
-The \code{skymap} with \code{umap.feature.chr}, a named list of
-\code{data.frame}s each carrying a \code{feature_type} column marking rows as \code{gene}
-or \code{feature}.
+The \code{skymap} with \code{skymap$UMAPs$skymap.feature.chr.UMAP}, a list
+keyed by chromosome, each entry a \code{data.frame} carrying a \code{feature_type}
+column marking rows as \code{gene} or \code{feature}.
 }
 \description{
 Reduces the gene and second-modality loadings of one or more chromosomes,

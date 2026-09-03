@@ -27,8 +27,8 @@ SkymapFindNeighbors.Chr(
 \item{verbose}{Report progress.}
 }
 \value{
-The \code{skymap} with \code{nb.feature.chr}, a named list holding
-\code{gene.to.feature} and \code{feature.to.gene} for each chromosome.
+The \code{skymap} with \code{skymap$NN.graph$skymap.feature.chr.nb}, a list
+keyed by chromosome, each holding \code{gene.to.feature} and \code{feature.to.gene}.
 }
 \description{
 For every chromosome, finds each gene's nearest second-modality features and
