@@ -1,0 +1,6 @@
+^data-raw$
+^\.github$
+^.*\.Rproj$
+^\.Rproj\.user$
+^tests/regression_published\.R$
+^tests/regression_vs_script\.R$

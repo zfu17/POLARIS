@@ -1,0 +1,227 @@
+---
+title: "Getting started with POLARIS"
+output:
+  rmarkdown::html_vignette:
+    toc: true
+vignette: >
+  %\VignetteIndexEntry{Getting started with POLARIS}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+POLARIS takes two matrices measured on the same cells and returns three things
+from one closed-form decomposition:
+
+1. a **per-cell concordance score**, saying how far the two modalities agree
+   about each individual cell;
+2. a **joint cell embedding** that keeps structure supported by either
+   modality, rather than only what they share;
+3. a **cross-modal feature embedding** that scores candidate feature pairs,
+   with a standard error attached to every pair.
+
+Nothing here is fit separately. One call produces all three.
+
+```{r}
+library(POLARIS)
+```
+
+# A worked example on simulated data
+
+`polarisSimulate()` builds two modalities sharing a low-rank structure, where a
+known subset of cells is driven by private rather than shared factors. Those
+cells are cross-modality discordant by construction, which gives us a ground
+truth to check the score against.
+
+```{r}
+set.seed(42)
+sim <- polarisSimulate(n = 400, g = 80, p = 120, r = 5, discordant = 0.3)
+dim(sim$X)
+dim(sim$Y)
+```
+
+Both matrices are **cells in rows, features in columns**. This is the
+orientation POLARIS expects, and it is the transpose of how Seurat stores
+assays.
+
+```{r}
+fit <- Polaris(sim$X, sim$Y, gene.chr.ref = sim$anno,
+               x.sds = 0, verbose = FALSE)
+fit
+```
+
+## The concordance score
+
+```{r}
+fit <- SkymapSimScore(fit)
+summary(fit$concordance)
+```
+
+`concordance` is the cosine similarity of a cell's paired coordinates, rescaled
+to $[0,1]$ as $\frac{1}{2}(\cos + 1)$. Use this rather than
+`simscore.cosine`, which is the raw cosine in $[-1,1]$; the two rank cells
+identically but only the rescaled form is bounded.
+
+The discordant cells should score lower, and they do:
+
+```{r}
+tapply(fit$concordance, ifelse(sim$shared < 0.5, "discordant", "concordant"),
+       mean)
+```
+
+## Feature linkage
+
+`SkymapLinkageTable()` enumerates candidate pairs within a genomic window of
+each gene's transcription start site and scores them.
+
+```{r}
+tab <- SkymapLinkageTable(fit, gene.anno = sim$anno, window = 1e6,
+                          verbose = FALSE)
+head(tab[, c("gene", "peak", "dist", "score_raw", "SE", "score_adj")])
+```
+
+`SE` is a closed-form leave-one-cell-out jackknife. It does not refit the
+model: because the score is bilinear in the fitted embedding, all *n*
+omitted-cell scores follow from two matrix-vector products.
+
+## Ranking by `z_dev`, not by magnitude
+
+Raw scores decay with genomic distance, so ranking by `score_raw` recovers
+proximity rather than regulation. `SkymapZdev()` standardizes within fixed
+distance strata:
+
+```{r}
+tab <- SkymapZdev(tab)
+head(tab[order(-tab$z_dev), c("gene", "peak", "dist", "distbin", "z_dev")])
+```
+
+This is the statistic the POLARIS benchmarks rank by. Distance-stratified
+analyses also exclude pairs closer than 10 kb, which is not done for you:
+
+```{r}
+tab <- tab[tab$dist >= POLARIS_MIN_DIST, ]
+nrow(tab)
+```
+
+`z_dev` is a variance-standardized **ranking** statistic. It is not a
+calibrated probability or an FDR: the standard error is conditional on the
+fitted model and computed on the denoised modalities.
+
+# Working from real data
+
+## Preprocessing, which POLARIS does not do for you
+
+Normalization is a methodological choice, so POLARIS takes matrices that are
+already normalized. The conventions used in the POLARIS paper are:
+
+```r
+obj <- NormalizeData(obj, assay = "RNA",
+                     normalization.method = "LogNormalize",
+                     scale.factor = 1e6)
+obj <- FindVariableFeatures(obj, nfeatures = 3000)
+obj <- ScaleData(obj, assay = "RNA", features = rownames(obj))
+DefaultAssay(obj) <- "ATAC"
+obj <- Signac::RunTFIDF(obj)
+```
+
+Note that `ScaleData` runs on **all** genes, not on the variable features.
+POLARIS selects its own feature space through the `x.sds` variance floor, which
+is deliberately broader than a highly-variable-gene list. The variable features
+are used elsewhere (for an RNA-only PCA), not to build $X$.
+
+## The `x.sds` floor
+
+`Polaris()` keeps features of $X$ whose standard deviation exceeds `x.sds`,
+default `0.95`, and features of $Y$ above `y.sds`, default `0`. The asymmetry is
+intentional: $X$ is expected to be z-scored, so a floor near 1 selects genes
+retaining appreciable variance, while $Y$ is on a different scale and only
+constant features are dropped.
+
+**This default assumes $X$ is z-scored.** If you pass a log-normalized layer,
+almost every gene falls below the floor and the fit stops with an empty $X$.
+Pass `x.sds = 0` in that case, as the CITE-seq analyses do.
+
+## From a Seurat object
+
+`RunPolaris()` assembles the arguments and returns the joint embedding as a
+`DimReduc`, so it drops into the usual Seurat workflow:
+
+```r
+res <- RunPolaris(obj, assay.x = "RNA", assay.y = "ATAC", mc.cores = 4)
+
+res$object <- Seurat::FindNeighbors(res$object, reduction = "polaris",
+                                    dims = seq_len(ncol(res$skymap$skymap.cell)))
+res$object <- Seurat::FindClusters(res$object, resolution = 0.4)
+
+res$skymap <- SkymapSimScore(res$skymap)
+res$object$concordance <- res$skymap$concordance[colnames(res$object)]
+```
+
+## Gene annotation
+
+The annotation must match the genome build the peaks were called against. The
+best source is the one already attached to your ATAC assay, which
+`RunPolaris()` picks up automatically:
+
+```r
+anno <- Signac::Annotation(obj[["ATAC"]])
+```
+
+Otherwise use the bundled table, or build one for any other build:
+
+```r
+anno <- polarisTSSRef("hg38")
+anno <- polarisMakeTSSRef(EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86)
+anno <- polarisMakeTSSRef("path/to/genes.gtf.gz")
+```
+
+Strand matters. POLARIS places transcription start sites with a strand-aware
+resize, so an unstranded annotation gives every minus-strand gene the wrong end
+of the gene as its TSS. `polarisMakeTSSRef()` refuses input with no strand.
+
+# Beyond RNA and ATAC
+
+POLARIS is a general two-modality method. The genomic layer is optional:
+`gene.chr.ref` and the per-chromosome decomposition exist only to make linkage
+*cis*, and without them you still get the concordance score, the joint
+embedding, and the genome-wide loadings in `skymap.P` and `skymap.Q`.
+
+For CITE-seq, $Y$ is the CLR-normalized ADT matrix. Protein features have no
+genomic coordinate, so `z_dev` is undefined for protein-gene pairs; score them
+from the loadings with an unweighted cosine instead.
+
+```r
+fit <- Polaris(t(obj[["RNA"]]$scale.data), t(obj[["ADT"]]$data), x.sds = 0)
+P <- fit$skymap.P; Q <- fit$skymap.Q
+cosine <- (P / sqrt(rowSums(P^2))) %*% t(Q / sqrt(rowSums(Q^2)))
+```
+
+# Cell-type-specific linkage from one global fit
+
+Because the joint embedding assigns a coordinate to every cell, feature
+projections can be recomputed on any subset of cells **without refitting**.
+Restricting $X$, $Y$ and $W$ to a population and passing them through the same
+score gives population-specific linkage. Whole-population scores reflect an
+average and carry little cell-type-specific signal; restricting to a cell type
+is what recovers cell-type-specific links.
+
+# Notes on performance
+
+`Polaris()` is CPU-only. Its dominant cost is the two truncated SVDs, which are
+BLAS-bound for a dense $X$. The difference between R's reference BLAS and a
+threaded one is large — on the order of 25x for that step — so linking R
+against OpenBLAS or Accelerate is the single most effective speedup available.
+
+`mc.cores` parallelizes the per-chromosome decomposition with `mclapply`, which
+is fork-based and therefore serial on Windows.
+
+Fits are deterministic. The truncated SVD used for $X$ draws a random starting
+vector, so POLARIS fixes a seed internally and restores the previous RNG state
+afterwards, leaving your own random stream untouched.
+
+```{r}
+sessionInfo()
+```
