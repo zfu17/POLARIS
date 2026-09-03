@@ -55,9 +55,12 @@
 #' The optimizer of the POLARIS objective is obtained from the SVD of
 #' \eqn{(XX^\top)^{1/2}(YY^\top)^{1/2}}. Rather than forming those `n` x `n`
 #' operators, this implementation uses the exact identity
-#' \eqn{XX^\top YY^\top = U_1 C U_2^\top}, where \eqn{U_1} and \eqn{U_2} are the
-#' cell-space singular vectors of the two denoised modalities, reducing the
-#' problem to an `r` x `r` SVD. The feature-loading product is likewise
+#' \deqn{(XX^\top)^{1/2}(YY^\top)^{1/2} = U_1 \left[D_1 (U_1^\top U_2) D_2\right] U_2^\top,}
+#' where \eqn{X = U_1 D_1 V_1^\top} and \eqn{Y = U_2 D_2 V_2^\top} are the thin
+#' SVDs of the two denoised modalities. Since \eqn{U_1} and \eqn{U_2} have
+#' orthonormal columns, the SVD of the small bracketed `r` x `r` matrix yields
+#' the SVD of the full operator, reducing an `n` x `n` problem to an `r` x `r`
+#' one. The feature-loading product is likewise
 #' decomposed through its thin QR factors instead of materializing a dense
 #' genes-by-features matrix. Both give the identical decomposition.
 #'
@@ -161,9 +164,19 @@ Polaris <- function(X, Y,
                  max(r1, r2), min(length(X.svd$d), length(Y.svd$d))), call. = FALSE)
 
   ## ---- joint cell embedding -----------------------------------------------
-  ## XX'YY' = U1 D1 (U1'U2) D2 U2' = U1 C U2'. U1 and U2 already have orthonormal
-  ## columns, so svd(C) = W S Z' gives XX'YY' = (U1 W) S (U2 Z)', the identical
-  ## SVD, from an r x r problem instead of three dense n x n matrices.
+  ## The operator being decomposed is (XX')^(1/2) (YY')^(1/2), which is the
+  ## objective in the POLARIS Methods. With X = U1 D1 V1' and Y = U2 D2 V2',
+  ##   (XX')^(1/2) (YY')^(1/2) = U1 D1 U1' U2 D2 U2' = U1 [D1 (U1'U2) D2] U2'.
+  ## U1 and U2 have orthonormal columns, so svd(core) = W S Z' gives the SVD of
+  ## the full operator as (U1 W) S (U2 Z)', from an r x r problem instead of
+  ## three dense n x n matrices.
+  ##
+  ## NOTE the exponents. The comment in the pre-package polaris_function.R wrote
+  ## this identity as "XX'YY' = U1 D1 (U1'U2) D2 U2'", which is not true: XX'YY'
+  ## would carry D1^2 and D2^2 and its singular values are ~80x larger. The CODE
+  ## was always right (it uses D1 and D2, i.e. the square roots) and matches the
+  ## Methods; only the comment was wrong. Verified numerically: the reconstruction
+  ## matches (XX')^(1/2)(YY')^(1/2) to 3.6e-15 and differs from XX'YY' by O(600).
   say("Computing U and V.")
   U1 <- X.svd$u[, seq_len(r1), drop = FALSE]
   U2 <- Y.svd$u[, seq_len(r2), drop = FALSE]

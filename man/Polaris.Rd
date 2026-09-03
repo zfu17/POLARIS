@@ -94,9 +94,12 @@ feature embedding.
 The optimizer of the POLARIS objective is obtained from the SVD of
 \eqn{(XX^\top)^{1/2}(YY^\top)^{1/2}}. Rather than forming those \code{n} x \code{n}
 operators, this implementation uses the exact identity
-\eqn{XX^\top YY^\top = U_1 C U_2^\top}, where \eqn{U_1} and \eqn{U_2} are the
-cell-space singular vectors of the two denoised modalities, reducing the
-problem to an \code{r} x \code{r} SVD. The feature-loading product is likewise
+\deqn{(XX^\top)^{1/2}(YY^\top)^{1/2} = U_1 \left[D_1 (U_1^\top U_2) D_2\right] U_2^\top,}
+where \eqn{X = U_1 D_1 V_1^\top} and \eqn{Y = U_2 D_2 V_2^\top} are the thin
+SVDs of the two denoised modalities. Since \eqn{U_1} and \eqn{U_2} have
+orthonormal columns, the SVD of the small bracketed \code{r} x \code{r} matrix yields
+the SVD of the full operator, reducing an \code{n} x \code{n} problem to an \code{r} x \code{r}
+one. The feature-loading product is likewise
 decomposed through its thin QR factors instead of materializing a dense
 genes-by-features matrix. Both give the identical decomposition.
 
