@@ -41,13 +41,15 @@ LinkingTo:
     RcppEigen
 Suggests:
     Seurat,
+    SeuratObject,
     Signac,
+    GenomicFeatures,
+    rtracklayer,
     SingleCellExperiment,
     SummarizedExperiment,
     testthat (>= 3.0.0),
     knitr,
-    rmarkdown,
-    BiocStyle
+    rmarkdown
 biocViews: SingleCell, DimensionReduction, GeneExpression, ATACSeq,
     Epigenetics, GeneRegulation, Software, Transcriptomics, Clustering
 URL: https://github.com/zfu17/POLARIS

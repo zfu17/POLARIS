@@ -196,3 +196,20 @@
       invokeRestart("muffleWarning")
     }))
 }
+
+#' Column standard deviations, dispatching explicitly on sparseness
+#'
+#' `MatrixGenerics::colSds` handles both classes, but the dgCMatrix method lives
+#' in sparseMatrixStats, which MatrixGenerics only loads lazily from its own
+#' Suggests. Calling it directly makes the dependency real rather than
+#' incidental. Both routes return identical values.
+#'
+#' The pre-package code called `colSds` unqualified, which resolved by
+#' library() attach order: matrixStats::colSds is not generic and errors on any
+#' S4 matrix, so the fit worked only because the drivers happened to attach
+#' sparseMatrixStats and SparseArray afterwards.
+#' @noRd
+.col_sds <- function(x) {
+  if (methods::is(x, "sparseMatrix")) sparseMatrixStats::colSds(x)
+  else MatrixGenerics::colSds(x)
+}

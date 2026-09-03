@@ -67,8 +67,9 @@ RunPolaris <- function(object,
                        reduction.name = "polaris",
                        ...) {
 
-  if (!requireNamespace("Seurat", quietly = TRUE))
-    stop("RunPolaris() needs the Seurat package.", call. = FALSE)
+  for (p in c("Seurat", "SeuratObject"))
+    if (!requireNamespace(p, quietly = TRUE))
+      stop(sprintf("RunPolaris() needs the %s package.", p), call. = FALSE)
   if (!methods::is(object, "Seurat"))
     stop("`object` must be a Seurat object. For matrices use Polaris().",
          call. = FALSE)

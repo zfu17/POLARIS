@@ -111,8 +111,8 @@ Polaris <- function(X, Y,
   ## memory. It also relied on `colSds` resolving to the right namespace by
   ## library() ordering, since matrixStats::colSds is not generic and errors on
   ## any S4 matrix.
-  keep.x <- MatrixGenerics::colSds(X) > x.sds
-  keep.y <- MatrixGenerics::colSds(Y) > y.sds
+  keep.x <- .col_sds(X) > x.sds
+  keep.y <- .col_sds(Y) > y.sds
   if (!any(keep.x))
     stop(sprintf(paste0("No feature of X has standard deviation above x.sds = %g, ",
                         "so X is empty. If X is not z-scored (for example ",
