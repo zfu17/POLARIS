@@ -1,0 +1,12 @@
+citHeader("To cite POLARIS in publications use:")
+
+bibentry(
+  bibtype  = "Article",
+  title    = "POLARIS: concordance-aware integration of paired single-cell multiomic data",
+  author   = c(person("Ziqi", "Fu")),
+  year     = "2026",
+  journal  = "Manuscript in preparation",
+  textVersion = paste0(
+    "Fu Z (2026). POLARIS: concordance-aware integration of paired ",
+    "single-cell multiomic data. Manuscript in preparation.")
+)

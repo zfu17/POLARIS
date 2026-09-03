@@ -4,8 +4,9 @@
 #' suitable for the `gene.chr.ref` argument of [Polaris()] and the `gene.anno`
 #' argument of [SkymapLinkageTable()].
 #'
-#' @param genome Either `"hg38"` or `"mm10"`, naming one of the slim reference
-#'   tables bundled with the package.
+#' @param genome Name of a bundled reference table. Currently only `"hg38"` is
+#'   bundled; call with any other value to see what is available. For every other
+#'   genome and build use [polarisMakeTSSRef()].
 #'
 #' @return A stranded `GRanges` with `gene_name` and `gene_type` columns.
 #'
@@ -32,14 +33,16 @@
 #'
 #' @seealso [polarisMakeTSSRef()]
 #' @export
-polarisTSSRef <- function(genome = c("hg38", "mm10")) {
-  genome <- match.arg(genome)
-  f <- system.file("extdata", paste0("tss_", genome, ".rds"),
-                   package = "POLARIS", mustWork = FALSE)
-  if (!nzchar(f))
-    stop(sprintf(paste0("No bundled annotation for '%s'. Build one from a TxDb, ",
-                        "EnsDb or GTF with polarisMakeTSSRef()."), genome),
-         call. = FALSE)
+polarisTSSRef <- function(genome = "hg38") {
+  dir <- system.file("extdata", package = "POLARIS")
+  have <- sub("^tss_", "", sub("\\.rds$", "",
+              list.files(dir, pattern = "^tss_.*\\.rds$")))
+  f <- file.path(dir, paste0("tss_", genome, ".rds"))
+  if (!file.exists(f))
+    stop(sprintf(paste0("No bundled annotation for '%s'. Bundled: %s. For any ",
+                        "other genome or build, construct one from a TxDb, EnsDb ",
+                        "or GTF with polarisMakeTSSRef()."),
+                 genome, paste(have, collapse = ", ")), call. = FALSE)
   d <- readRDS(f)
   GenomicRanges::GRanges(
     seqnames = d$chr,

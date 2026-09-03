@@ -40,16 +40,25 @@
 #' \eqn{\mathrm{IPw} = x^\top K y} in the cell kernel \eqn{K = WW^\top}, all `n`
 #' omitted-cell scores follow in closed form from two matrix-vector products,
 #' and \eqn{\mathrm{SE} = \sqrt{\tfrac{n-1}{n}\sum_i (s_{(-i)} - \bar{s})^2}}.
+#' See the section below for exactly which \eqn{x} and \eqn{y} are used.
 #'
 #' `z_dev`, the genomic-distance-aware statistic that the POLARIS benchmarks
 #' rank by, is not a column here. Compute it with [SkymapZdev()], which needs
 #' the whole table in order to form the within-distance-bin baselines.
 #'
 #' @section Which vectors the standard error uses:
-#' The POLARIS standard error is defined on the **rank-`r` denoised** gene and
-#' peak vectors. That is what you get by leaving `X` and `Y` as `NULL`: they are
-#' reconstructed from the SVDs stored in the fit, and this is the estimator
-#' behind every published POLARIS result.
+#' Leaving `X` and `Y` as `NULL` reconstructs the gene and peak vectors from the
+#' SVDs stored in the fit. Note carefully which truncation that is: the stored
+#' SVDs retain up to **50** components (the denoiser's ceiling, `min(50, ncol)`),
+#' **not** the selected rank `r` used for the cell embedding. So the standard
+#' error is computed on a rank-50 reconstruction of each modality, while the
+#' score itself comes from the rank-`r` embedding.
+#'
+#' This matters because the two are not close. On the published PBMC B-cell fit
+#' `r` is 8, and for a typical gene the rank-50 and rank-8 reconstructions
+#' correlate at only 0.53. The rank-50 form is the estimator behind every
+#' published POLARIS standard error, `z_dev` and `q_lfsr`, and is what this
+#' function computes.
 #'
 #' If you pass `X` and `Y`, the standard error is instead computed on those raw
 #' normalized matrices. That is a different estimator, it is not the one in the
@@ -87,8 +96,8 @@ SkymapLinkageTable <- function(skymap,
   if (missing(gene.anno) || is.null(gene.anno))
     stop(paste0("`gene.anno` is required: a GRanges with a gene_name column and ",
                 "strand, for the same genome build the peaks were called on. ",
-                "Use polarisTSSRef('hg38'), polarisTSSRef('mm10'), or ",
-                "polarisMakeTSSRef() for another build."), call. = FALSE)
+                "Use polarisTSSRef('hg38'), or polarisMakeTSSRef() to build one ",
+                "from a TxDb, EnsDb or GTF."), call. = FALSE)
   if (is.character(gene.anno))
     stop(paste0("`gene.anno` must be a GRanges, not a file path. Read it first, ",
                 "or use polarisTSSRef()."), call. = FALSE)

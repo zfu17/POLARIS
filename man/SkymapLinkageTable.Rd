@@ -68,6 +68,7 @@ does not refit POLARIS. Writing the score as a bilinear form
 \eqn{\mathrm{IPw} = x^\top K y} in the cell kernel \eqn{K = WW^\top}, all \code{n}
 omitted-cell scores follow in closed form from two matrix-vector products,
 and \eqn{\mathrm{SE} = \sqrt{\tfrac{n-1}{n}\sum_i (s_{(-i)} - \bar{s})^2}}.
+See the section below for exactly which \eqn{x} and \eqn{y} are used.
 
 \code{z_dev}, the genomic-distance-aware statistic that the POLARIS benchmarks
 rank by, is not a column here. Compute it with \code{\link[=SkymapZdev]{SkymapZdev()}}, which needs
@@ -75,10 +76,18 @@ the whole table in order to form the within-distance-bin baselines.
 }
 \section{Which vectors the standard error uses}{
 
-The POLARIS standard error is defined on the \strong{rank-\code{r} denoised} gene and
-peak vectors. That is what you get by leaving \code{X} and \code{Y} as \code{NULL}: they are
-reconstructed from the SVDs stored in the fit, and this is the estimator
-behind every published POLARIS result.
+Leaving \code{X} and \code{Y} as \code{NULL} reconstructs the gene and peak vectors from the
+SVDs stored in the fit. Note carefully which truncation that is: the stored
+SVDs retain up to \strong{50} components (the denoiser's ceiling, \code{min(50, ncol)}),
+\strong{not} the selected rank \code{r} used for the cell embedding. So the standard
+error is computed on a rank-50 reconstruction of each modality, while the
+score itself comes from the rank-\code{r} embedding.
+
+This matters because the two are not close. On the published PBMC B-cell fit
+\code{r} is 8, and for a typical gene the rank-50 and rank-8 reconstructions
+correlate at only 0.53. The rank-50 form is the estimator behind every
+published POLARIS standard error, \code{z_dev} and \code{q_lfsr}, and is what this
+function computes.
 
 If you pass \code{X} and \code{Y}, the standard error is instead computed on those raw
 normalized matrices. That is a different estimator, it is not the one in the

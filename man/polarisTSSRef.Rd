@@ -4,11 +4,12 @@
 \alias{polarisTSSRef}
 \title{Gene annotation for POLARIS linkage}
 \usage{
-polarisTSSRef(genome = c("hg38", "mm10"))
+polarisTSSRef(genome = "hg38")
 }
 \arguments{
-\item{genome}{Either \code{"hg38"} or \code{"mm10"}, naming one of the slim reference
-tables bundled with the package.}
+\item{genome}{Name of a bundled reference table. Currently only \code{"hg38"} is
+bundled; call with any other value to see what is available. For every other
+genome and build use \code{\link[=polarisMakeTSSRef]{polarisMakeTSSRef()}}.}
 }
 \value{
 A stranded \code{GRanges} with \code{gene_name} and \code{gene_type} columns.

@@ -4,3 +4,6 @@
 ^\.Rproj\.user$
 ^tests/regression_published\.R$
 ^tests/regression_vs_script\.R$
+src/.*\.o$
+src/.*\.so$
+^POLARIS\.Rcheck$
