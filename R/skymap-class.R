@@ -81,8 +81,8 @@ print.skymap <- function(x, ...) {
                 ip$T1, ip$T2, ip$T3))
   extra <- setdiff(names(x), c("skymap.cell", "skymap.U", "skymap.V", "stdev.cell",
                                "skymap.P", "skymap.Q", "stdev.feature",
-                               "skymap.feature.chr", "X.svd", "Y.svd",
-                               "input.param"))
+                               "stdev.feature.full", "skymap.feature.chr",
+                               "X.svd", "Y.svd", "input.param"))
   if (length(extra))
     cat(sprintf("  also present     %s\n", paste(extra, collapse = ", ")))
   invisible(x)

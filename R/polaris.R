@@ -243,6 +243,10 @@ Polaris <- function(X, Y,
   skymap.Q <- XwY.svd$v[, seq_len(r5), drop = FALSE]
   dimnames(skymap.Q) <- list(colnames(Y), paste0("qPC_", seq_len(r5)))
   stdev.feature <- XwY.svd$d[seq_len(r5)]
+  ## The full spectrum is kept as well (at most r3 + r4 values). The pre-package
+  ## fit discarded everything past r5, which made the denoiser spectrum figure
+  ## impossible to redraw from a saved object. See polarisSpectrum().
+  stdev.feature.full <- XwY.svd$d
 
   ## ---- per-chromosome feature embedding -----------------------------------
   skymap.feature.chr <- .feature_chr_embedding(
@@ -259,6 +263,7 @@ Polaris <- function(X, Y,
     skymap.P           = skymap.P,
     skymap.Q           = skymap.Q,
     stdev.feature      = stdev.feature,
+    stdev.feature.full = stdev.feature.full,
     skymap.feature.chr = skymap.feature.chr,
     X.svd              = X.svd,
     Y.svd              = Y.svd,
@@ -273,7 +278,12 @@ Polaris <- function(X, Y,
                               n.cells = nrow(skymap.cell),
                               n.features.X = ncol(X), n.features.Y = ncol(Y),
                               polaris.version = as.character(
-                                utils::packageVersion("POLARIS")))
+                                utils::packageVersion("POLARIS")),
+                              ## Records the software that produced this fit, so
+                              ## a saved skymap stays self-documenting even if
+                              ## the environment later changes. Surfaced by
+                              ## polarisFitSummary() and polarisVersions().
+                              versions = .capture_versions())
   ))
 }
 
