@@ -13,7 +13,7 @@ the \code{dataset} column; unnamed fits are numbered.}
 \value{
 A \code{data.frame}, one row per fit: \code{dataset}, \code{n.cells},
 \code{n.features.X}, \code{n.features.Y}, \code{T1}, \code{T2}, \code{T3}, \code{r1}, \code{r2}, \code{r3}, \code{r4},
-\code{r5}, \code{x.sds}, \code{y.sds}, \code{seed}, \code{polaris.version}.
+\code{r5}, \code{x.sds}, \code{y.sds}, \code{reconcile.ranks}, \code{seed}, \code{polaris.version}.
 }
 \description{
 One row per fit, giving the data dimensions, the thresholds supplied and the

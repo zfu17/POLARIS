@@ -168,3 +168,49 @@ test_that("the per-chromosome verbs use the nested contract too", {
   expect_named(fit$NN.graph$skymap.feature.chr.nb$chr1,
                c("gene.to.feature", "feature.to.gene"))
 })
+
+test_that("reconcile.ranks controls the rank collapse", {
+  ## The POLARIS manuscript mixes conventions: Figs 2, 3, 4b,c and 5 were fitted
+  ## WITHOUT the collapse, Fig 6 and the per-cell-type fits WITH it. The package
+  ## must be able to reproduce both, so this is an argument rather than a
+  ## hard-coded choice (measured audit, 2026-09-10/11).
+  set.seed(11); sim <- polarisSimulate(n = 250, g = 70, p = 90, r = 6)
+
+  a <- Polaris(sim$X, sim$Y, x.sds = 0, verbose = FALSE, reconcile.ranks = TRUE)
+  b <- Polaris(sim$X, sim$Y, x.sds = 0, verbose = FALSE, reconcile.ranks = FALSE)
+
+  expect_true(a$input.param$reconcile.ranks)
+  expect_false(b$input.param$reconcile.ranks)
+  ## collapsed: the two modality ranks are equal. unreconciled: each keeps its own.
+  expect_equal(a$input.param$r1, a$input.param$r2)
+  expect_equal(b$input.param$r1, b$input.param$r1.auto)
+  expect_equal(b$input.param$r2, b$input.param$r2.auto)
+
+  ## r3 = r4 = min(r1, r2) either way, so the joint embedding has the SAME width
+  ## under both conventions -- ncol(skymap.cell) cannot reveal which was used.
+  expect_equal(ncol(a$skymap.cell), ncol(b$skymap.cell))
+})
+
+test_that("an unequal-rank fit actually differs from the collapsed one", {
+  ## Only meaningful when the ratio rule picks different ranks for the two
+  ## modalities; construct a case where it does.
+  set.seed(23); sim <- polarisSimulate(n = 300, g = 80, p = 100, r = 6)
+  b <- Polaris(sim$X, sim$Y, x.sds = 0, verbose = FALSE, reconcile.ranks = FALSE)
+  skip_if(b$input.param$r1 == b$input.param$r2,
+          "ratio rule happened to pick equal ranks; nothing to contrast")
+  a <- Polaris(sim$X, sim$Y, x.sds = 0, verbose = FALSE, reconcile.ranks = TRUE)
+  ## the embeddings must genuinely differ, else the argument is a no-op
+  expect_false(isTRUE(all.equal(as.numeric(a$stdev.cell),
+                                as.numeric(b$stdev.cell))))
+})
+
+test_that("polarisFitSummary records which convention was used", {
+  ## Supplementary Table 3 has to state this per analysis, and it is invisible
+  ## from the embedding width.
+  set.seed(11); sim <- polarisSimulate(n = 200, g = 60, p = 80, r = 5)
+  a <- Polaris(sim$X, sim$Y, x.sds = 0, verbose = FALSE, reconcile.ranks = TRUE)
+  b <- Polaris(sim$X, sim$Y, x.sds = 0, verbose = FALSE, reconcile.ranks = FALSE)
+  s <- polarisFitSummary(collapsed = a, unreconciled = b)
+  expect_true("reconcile.ranks" %in% names(s))
+  expect_equal(s$reconcile.ranks, c(TRUE, FALSE))
+})

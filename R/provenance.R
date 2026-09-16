@@ -86,7 +86,7 @@ polarisVersions <- function(which = c("imports", "all"), installed.only = TRUE) 
 #'
 #' @return A `data.frame`, one row per fit: `dataset`, `n.cells`,
 #'   `n.features.X`, `n.features.Y`, `T1`, `T2`, `T3`, `r1`, `r2`, `r3`, `r4`,
-#'   `r5`, `x.sds`, `y.sds`, `seed`, `polaris.version`.
+#'   `r5`, `x.sds`, `y.sds`, `reconcile.ranks`, `seed`, `polaris.version`.
 #'
 #' @details
 #' `r1` and `r2` are the modality ranks after being set to their common minimum;
@@ -138,6 +138,9 @@ polarisFitSummary <- function(...) {
       r4 = grab(ip, "r4", ncol(fit$skymap.V)),
       r5 = grab(ip, "r5", if (!is.null(fit$skymap.P)) ncol(fit$skymap.P) else NA),
       x.sds = grab(ip, "x.sds"), y.sds = grab(ip, "y.sds"),
+      ## Which rank convention the fit used. Decides which published analyses it
+      ## reproduces, and is invisible from ncol(skymap.cell).
+      reconcile.ranks = grab(ip, "reconcile.ranks", NA),
       seed  = grab(ip, "seed"),
       polaris.version = grab(ip, "polaris.version", NA_character_),
       stringsAsFactors = FALSE, row.names = NULL)

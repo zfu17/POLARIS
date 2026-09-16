@@ -17,8 +17,10 @@
 #'   it flattens. Defaults `1.01`.
 #' @param T3 Ratio threshold for the feature-embedding rank `r5`. Default `1.1`.
 #' @param r1,r2 Ranks retained for `X` and `Y`. Derived from `T1` and `T2` unless
-#'   given. Note that the two modality ranks are set to their common minimum, so
-#'   supplying unequal values has no effect beyond the smaller of the two.
+#'   given. Under the default `reconcile.ranks = TRUE` the two are collapsed to
+#'   their common minimum afterwards, so supplying unequal values has no effect
+#'   beyond the smaller of the two; pass `reconcile.ranks = FALSE` to keep them
+#'   distinct.
 #' @param r3,r4 Dimensions of \eqn{\hat{U}} and \eqn{\hat{V}}. Default
 #'   `min(r1, r2)`.
 #' @param r5 Dimension of `P` and `Q`. Derived from `T3` unless given.
@@ -39,6 +41,21 @@
 #'   highly-variable-gene list, while `y.sds = 0` removes only constant features
 #'   of the second modality. Set `x.sds = 0` for modality pairs where `X` is not
 #'   z-scored, as the CITE-seq analyses do.
+#' @param reconcile.ranks Collapse the two modality ranks to their common
+#'   minimum (`TRUE`, the default and the behaviour the POLARIS Methods
+#'   describe), or keep each modality's own selected rank (`FALSE`).
+#'
+#'   **This decides which published analyses a fit reproduces**, because the
+#'   manuscript mixes the two. `TRUE` matches Fig. 6 (CITE-seq) and the
+#'   per-cell-type PBMC fits; `FALSE` matches Figs. 2, 3, 4b,c and 5. For
+#'   linkage the choice is an accuracy no-op (measured mean change in
+#'   distance-stratified AUROC: +0.0005 Hi-C, -0.00001 eQTL), but for CITE-seq
+#'   it is not, because the protein spectrum does not flatten inside the
+#'   50-component cap and collapsing discards around twenty protein components.
+#'
+#'   Either way `r3` and `r4` default to `min(r1, r2)`, so the joint embedding
+#'   has the same width and `ncol(skymap.cell)` does not reveal which convention
+#'   was used. [polarisFitSummary()] records it.
 #' @param mc.cores Cores for the per-chromosome decomposition.
 #' @param seed Seed for the starting vector of the `X` decomposition. The
 #'   truncated SVD used for `X` draws a random start, so without a fixed seed
@@ -80,6 +97,7 @@ Polaris <- function(X, Y,
                     r1 = NULL, r2 = NULL, r3 = NULL, r4 = NULL, r5 = NULL,
                     gene.chr.ref = NULL, chrs = NULL,
                     x.sds = 0.95, y.sds = 0,
+                    reconcile.ranks = TRUE,
                     mc.cores = 1L, seed = 1L, verbose = TRUE) {
 
   say <- function(...) if (isTRUE(verbose)) message(...)
@@ -152,12 +170,35 @@ Polaris <- function(X, Y,
   if (is.null(r1)) r1 <- r1.auto
   if (is.null(r2)) r2 <- r2.auto
 
-  ## The two modality ranks are set to their common minimum (POLARIS Methods,
-  ## Rank selection). Warn rather than silently overriding a user's choice.
-  if (r1 != r2) {
-    say(sprintf("Modality ranks r1 = %d and r2 = %d set to their common minimum, %d.",
-                r1, r2, min(r1, r2)))
-    r1 <- r2 <- min(r1, r2)
+  ## Whether to collapse the two modality ranks to their common minimum. This is
+  ## NOT a cosmetic choice: it decides which published analyses a fit can
+  ## reproduce, because the POLARIS manuscript mixes the two conventions.
+  ##
+  ##   reconcile.ranks = TRUE  (collapse, the Methods' "common minimum")
+  ##       Fig. 6 (CITE-seq, all four donors) and the per-cell-type PBMC fits.
+  ##   reconcile.ranks = FALSE (keep each modality's own selected rank)
+  ##       Figs. 2, 3, Supp 2, Supp 3 (the 2025-10-12 PBMC fits), Fig. 4b,c
+  ##       (the 10,578-cell granulocyte-sorted fit) and Fig. 5 (IGVF donor 2).
+  ##
+  ## Measured 2026-09-10 on the Fig. 4 fit: the collapse is an accuracy no-op for
+  ## linkage (mean dAUROC +0.0005 Hi-C, -0.00001 eQTL, sign test P = 1.00), far
+  ## below every published CI half-width. But it is NOT a no-op for CITE-seq,
+  ## where the ADT spectrum never flattens inside the 50-component cap
+  ## (r1 = 23-28 vs r2 = 45-49) so the collapse discards ~20 protein components
+  ## and the between-convention error is 7.2-54 rather than 0.16.
+  ##
+  ## Note "ATAC always binds" is false: whole-object PBMC fits have r1 > r2, so
+  ## the collapse truncates RNA, but the B (8 vs 10) and CD8_T (10 vs 15)
+  ## per-cell-type fits truncate ATAC instead.
+  if (isTRUE(reconcile.ranks)) {
+    if (r1 != r2) {
+      say(sprintf("Modality ranks r1 = %d and r2 = %d collapsed to their common minimum, %d.",
+                  r1, r2, min(r1, r2)))
+      r1 <- r2 <- min(r1, r2)
+    }
+  } else if (r1 != r2) {
+    say(sprintf("Keeping each modality's own rank: r1 = %d, r2 = %d (reconcile.ranks = FALSE).",
+                r1, r2))
   }
   if (r1 > length(X.svd$d) || r2 > length(Y.svd$d))
     stop(sprintf("Requested rank %d exceeds the %d components computed.",
@@ -275,6 +316,7 @@ Polaris <- function(X, Y,
                               r1 = r1, r2 = r2, r3 = r3, r4 = r4, r5 = r5,
                               r1.auto = r1.auto, r2.auto = r2.auto,
                               x.sds = x.sds, y.sds = y.sds, seed = seed,
+                              reconcile.ranks = reconcile.ranks,
                               n.cells = nrow(skymap.cell),
                               n.features.X = ncol(X), n.features.Y = ncol(Y),
                               polaris.version = as.character(

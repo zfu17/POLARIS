@@ -19,6 +19,7 @@ Polaris(
   chrs = NULL,
   x.sds = 0.95,
   y.sds = 0,
+  reconcile.ranks = TRUE,
   mc.cores = 1L,
   seed = 1L,
   verbose = TRUE
@@ -41,8 +42,10 @@ it flattens. Defaults \code{1.01}.}
 \item{T3}{Ratio threshold for the feature-embedding rank \code{r5}. Default \code{1.1}.}
 
 \item{r1, r2}{Ranks retained for \code{X} and \code{Y}. Derived from \code{T1} and \code{T2} unless
-given. Note that the two modality ranks are set to their common minimum, so
-supplying unequal values has no effect beyond the smaller of the two.}
+given. Under the default \code{reconcile.ranks = TRUE} the two are collapsed to
+their common minimum afterwards, so supplying unequal values has no effect
+beyond the smaller of the two; pass \code{reconcile.ranks = FALSE} to keep them
+distinct.}
 
 \item{r3, r4}{Dimensions of \eqn{\hat{U}} and \eqn{\hat{V}}. Default
 \code{min(r1, r2)}.}
@@ -68,6 +71,22 @@ cell population is a broader and more permissive selection than a
 highly-variable-gene list, while \code{y.sds = 0} removes only constant features
 of the second modality. Set \code{x.sds = 0} for modality pairs where \code{X} is not
 z-scored, as the CITE-seq analyses do.}
+
+\item{reconcile.ranks}{Collapse the two modality ranks to their common
+minimum (\code{TRUE}, the default and the behaviour the POLARIS Methods
+describe), or keep each modality's own selected rank (\code{FALSE}).
+
+\strong{This decides which published analyses a fit reproduces}, because the
+manuscript mixes the two. \code{TRUE} matches Fig. 6 (CITE-seq) and the
+per-cell-type PBMC fits; \code{FALSE} matches Figs. 2, 3, 4b,c and 5. For
+linkage the choice is an accuracy no-op (measured mean change in
+distance-stratified AUROC: +0.0005 Hi-C, -0.00001 eQTL), but for CITE-seq
+it is not, because the protein spectrum does not flatten inside the
+50-component cap and collapsing discards around twenty protein components.
+
+Either way \code{r3} and \code{r4} default to \code{min(r1, r2)}, so the joint embedding
+has the same width and \code{ncol(skymap.cell)} does not reveal which convention
+was used. \code{\link[=polarisFitSummary]{polarisFitSummary()}} records it.}
 
 \item{mc.cores}{Cores for the per-chromosome decomposition.}
 
