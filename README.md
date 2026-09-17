@@ -1,5 +1,7 @@
 # POLARIS
 
+[![R-CMD-check](https://github.com/zfu17/POLARIS/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/zfu17/POLARIS/actions/workflows/R-CMD-check.yaml)
+
 Concordance-aware integration of paired single-cell multiomic data.
 
 POLARIS takes two matrices measured on the same cells and returns three things
