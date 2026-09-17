@@ -18,10 +18,18 @@ thousands of cells in minutes.
 
 ## Installation
 
+POLARIS imports several Bioconductor packages, so install it through
+BiocManager, which resolves CRAN and Bioconductor dependencies together:
+
 ```r
-# install.packages("remotes")
-remotes::install_github("zfu17/POLARIS")
+install.packages(c("BiocManager", "remotes"))
+BiocManager::install("zfu17/POLARIS")
 ```
+
+The package contains compiled code, so a C++ toolchain is required: Rtools on
+Windows, the Xcode command line tools on macOS. Linux systems generally have one
+already. Add `build_vignettes = TRUE` to also build the vignette locally, which
+needs pandoc 2.8 or newer; RStudio bundles a suitable one.
 
 ## Quick start
 
@@ -54,7 +62,8 @@ res <- RunPolaris(obj, assay.x = "RNA", assay.y = "ATAC", mc.cores = 4)
 ```
 
 See `vignette("POLARIS")` for the full workflow, the preprocessing conventions,
-and the CITE-seq and cell-type-specific paths.
+and the CITE-seq and cell-type-specific paths. The vignette is installed when
+you pass `build_vignettes = TRUE`; its source is `vignettes/POLARIS.Rmd`.
 
 ## Two things worth reading before your first run
 

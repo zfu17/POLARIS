@@ -9,3 +9,4 @@ src/.*\.so$
 ^POLARIS\.Rcheck$
 ^tests/regression_gen1_vs_gen3\.R$
 ^tests/validate_convention\.R$
+^LICENSE\.md$
