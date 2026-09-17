@@ -25,6 +25,11 @@ from one closed-form decomposition:
 
 Nothing here is fit separately. One call produces all three.
 
+This vignette has two halves. The first runs on simulated data and executes when
+the vignette is built, so every number you see is real. The second is a complete
+walkthrough on a public multiome dataset; those blocks are shown but not run,
+because they need a multi-gigabyte download and several minutes of compute.
+
 ```{r}
 library(POLARIS)
 ```
@@ -110,41 +115,256 @@ nrow(tab)
 calibrated probability or an FDR: the standard error is conditional on the
 fitted model and computed on the denoised modalities.
 
-# Working from real data
+# A complete run on real data
+
+Everything below is the full pipeline on a public 10x PBMC multiome dataset,
+from download to a ranked linkage table. The blocks are not executed when this
+vignette is built, so copy them into a session to follow along.
+
+The dataset is distributed through `SeuratData` as two objects measured on the
+same 11,909 cells: RNA counts for 36,601 genes, and ATAC counts for 108,377
+peaks. We keep the roughly 10,400 cells the original analysis annotated, which is
+the whole experiment rather than a toy subset.
+
+## Getting the data
+
+```r
+# SeuratData is not on CRAN, so install it from GitHub once. Its current
+# release requires Seurat 5; POLARIS itself works with Seurat 4 or 5.
+# install.packages("remotes")
+# remotes::install_github("satijalab/seurat-data")
+
+library(SeuratData)
+
+InstallData("pbmcMultiome")                          # one-time download
+
+pbmc.rna  <- LoadData("pbmcMultiome", "pbmc.rna")    # 36,601 genes  x 11,909 cells
+pbmc.atac <- LoadData("pbmcMultiome", "pbmc.atac")   # 108,377 peaks x 11,909 cells
+```
+
+The peaks are already named `chr1-10109-10357`. POLARIS parses that form
+directly, so no renaming is needed. `pbmc.rna` also carries
+`seurat_annotations`, the cell type labels from the original analysis, which we
+use at the end.
+
+## Assembling one object
+
+POLARIS needs both modalities on the same cells, in the same order. We build the
+object from the raw count matrices so that nothing depends on which Seurat
+version wrote the files.
+
+```r
+library(Seurat)
+library(Signac)
+library(POLARIS)
+
+# The label "filtered" marks cells the original analysis rejected at QC. Dropping
+# those, and any cell without a label, leaves 10,412 of the 11,909.
+cells <- intersect(colnames(pbmc.rna), colnames(pbmc.atac))
+ann   <- pbmc.rna$seurat_annotations[cells]
+cells <- cells[!is.na(ann) & as.character(ann) != "filtered"]
+
+# To try the workflow quickly first, subsample here and raise it later:
+# set.seed(42); cells <- sample(cells, 3000)
+
+rna.counts  <- SeuratObject::LayerData(pbmc.rna,  assay = "RNA",  layer = "counts")[, cells]
+atac.counts <- SeuratObject::LayerData(pbmc.atac, assay = "ATAC", layer = "counts")[, cells]
+
+obj <- CreateSeuratObject(counts = rna.counts, assay = "RNA")
+# sep tells Signac how the peak names are punctuated: chr1-10109-10357
+obj[["ATAC"]] <- Signac::CreateChromatinAssay(counts = atac.counts, sep = c("-", "-"))
+obj$celltype  <- as.character(pbmc.rna$seurat_annotations[cells])
+```
 
 ## Preprocessing, which POLARIS does not do for you
 
 Normalization is a methodological choice, so POLARIS takes matrices that are
-already normalized. The conventions used in the POLARIS paper are:
+already normalized. These are the conventions used in the POLARIS paper.
 
 ```r
-obj <- NormalizeData(obj, assay = "RNA",
-                     normalization.method = "LogNormalize",
+DefaultAssay(obj) <- "RNA"
+obj <- NormalizeData(obj, normalization.method = "LogNormalize",
                      scale.factor = 1e6)
-obj <- FindVariableFeatures(obj, nfeatures = 3000)
-obj <- ScaleData(obj, assay = "RNA", features = rownames(obj))
+
+# ScaleData runs on ALL genes, not on the variable features. POLARIS selects its
+# own feature space through the x.sds variance floor, which is deliberately
+# broader than a highly-variable-gene list. Variable features are for an
+# RNA-only PCA elsewhere; they are not used to build X.
+obj <- ScaleData(obj, features = rownames(obj))
+
 DefaultAssay(obj) <- "ATAC"
 obj <- Signac::RunTFIDF(obj)
 ```
 
-Note that `ScaleData` runs on **all** genes, not on the variable features.
-POLARIS selects its own feature space through the `x.sds` variance floor, which
-is deliberately broader than a highly-variable-gene list. The variable features
-are used elsewhere (for an RNA-only PCA), not to build $X$.
+## Orientation, the one thing people get wrong
 
-## The `x.sds` floor
+```r
+# X and Y are CELLS IN ROWS. Seurat stores assays features-by-cells, so both
+# need transposing. X is the scaled RNA; Y is the TF-IDF normalized ATAC.
+X <- Matrix::t(SeuratObject::LayerData(obj, assay = "RNA",  layer = "scale.data"))
+Y <- Matrix::t(SeuratObject::LayerData(obj, assay = "ATAC", layer = "data"))
 
-`Polaris()` keeps features of $X$ whose standard deviation exceeds `x.sds`,
-default `0.95`, and features of $Y$ above `y.sds`, default `0`. The asymmetry is
-intentional: $X$ is expected to be z-scored, so a floor near 1 selects genes
-retaining appreciable variance, while $Y$ is on a different scale and only
-constant features are dropped.
+dim(X)   # 10,412 cells x 36,601 genes, dense, about 2.8 GB
+dim(Y)   # 10,412 cells x 108,377 peaks, sparse
+```
 
-**This default assumes $X$ is z-scored.** If you pass a log-normalized layer,
-almost every gene falls below the floor and the fit stops with an empty $X$.
-Pass `x.sds = 0` in that case, as the CITE-seq analyses do.
+Keeping `Y` sparse matters. POLARIS picks a different truncated-SVD solver for a
+sparse second modality, and densifying 108,377 peaks would cost memory for
+nothing.
 
-## From a Seurat object
+## Gene annotation
+
+The annotation must match the genome build the peaks were called against, and it
+must carry strand, because transcription start sites are placed with a
+strand-aware resize.
+
+```r
+# Bundled Cell Ranger ARC GRCh38 table, which matches this dataset.
+anno <- polarisTSSRef("hg38")
+
+# Alternatives: the annotation already attached to a Signac assay, which is the
+# safest source because it is guaranteed to match your peaks, or one built from
+# any TxDb, EnsDb or GTF.
+# anno <- Signac::Annotation(obj[["ATAC"]])
+# anno <- polarisMakeTSSRef(EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86)
+# anno <- polarisMakeTSSRef("path/to/genes.gtf.gz")
+```
+
+## The fit
+
+```r
+# mc.cores parallelizes the per-chromosome feature decomposition only.
+# gene.chr.ref is what makes linkage cis; leave it NULL for modality pairs with
+# no genomic coordinates, such as CITE-seq.
+fit <- Polaris(X, Y, gene.chr.ref = anno, mc.cores = 4, verbose = TRUE)
+```
+
+With `verbose = TRUE` this narrates what it decides, and those messages are
+worth reading:
+
+- how many features cleared each variance floor, which on this dataset keeps
+  roughly a third of genes and nearly all peaks;
+- the two modality ranks the denoiser chose, and the common minimum they are
+  collapsed to. Both ranks come from the ratio rule, not from a fixed setting.
+  Pass `reconcile.ranks = FALSE` to keep each modality's own rank;
+- how many peaks fall outside the primary assembly, on `chrM`, scaffolds or
+  patch contigs. Those are excluded from the per-chromosome step and reported
+  rather than dropped silently.
+
+The result is a `skymap`, a plain named list with a `print` method:
+
+```r
+fit                        # dimensions, selected ranks, what is stored
+
+fit$skymap.cell            # cells x (r3 + r4), the joint embedding
+fit$skymap.U               # cells x r3, the X-side paired coordinates
+fit$skymap.V               # cells x r4, the Y-side paired coordinates
+fit$skymap.P               # genes x r5, genome-wide gene loadings
+fit$skymap.Q               # peaks x r5, genome-wide peak loadings
+fit$skymap.feature.chr     # per-chromosome P, Q and singular values
+fit$input.param            # every threshold and rank actually used
+
+polarisFitSummary(fit)     # the same settings as a one-row data frame
+polarisSpectrum(fit)       # the singular values, to redraw the denoiser plot
+```
+
+## Per-cell concordance
+
+```r
+fit <- SkymapSimScore(fit)
+
+summary(fit$concordance)
+
+# Concordance varies systematically across populations, so it is worth looking
+# at by cell type rather than in aggregate.
+sort(tapply(fit$concordance, obj$celltype[rownames(fit$skymap.cell)], median))
+```
+
+Two cautions. Concordance is not a quality score, and a low value is not a bad
+cell: resting populations genuinely agree less across modalities than
+transitioning ones. It is also sensitive to how abundant a population is in the
+sample, so differences between a common and a rare cell type are not purely
+biological. Compare like with like.
+
+## Cis linkage with standard errors
+
+```r
+# Enumerate gene-peak pairs within 1 Mb of each TSS and score them. On the full
+# 10,412 cells this gives about 1.8 million pairs.
+tab <- SkymapLinkageTable(fit, gene.anno = anno, window = 1e6, mc.cores = 16)
+
+colnames(tab)
+# gene, peak, chr, dist, score_raw, SE, score_adj, p_lfsr, q_lfsr
+```
+
+`score_raw` is the weighted inner product of the gene and peak loadings. `SE` is
+the leave-one-cell-out jackknife. `score_adj`, `p_lfsr` and `q_lfsr` come from
+an empirical-Bayes shrinkage of the scores, useful for reporting but not for
+ranking.
+
+Pass `se = FALSE` to skip the standard errors, which is much cheaper if you only
+want scores.
+
+## Ranking
+
+```r
+tab <- SkymapZdev(tab)      # adds distbin, mu0, z_dev and z_dev_fl
+
+# Always apply the distance floor before ranking. It is not done for you.
+tab <- tab[tab$dist >= POLARIS_MIN_DIST, ]
+
+head(tab[order(-tab$z_dev), c("gene", "peak", "dist", "score_raw", "SE", "z_dev")])
+```
+
+Compare that with `order(-tab$score_raw)`, and the two lists barely overlap.
+`z_dev` differs from raw magnitude in two ways at once. It subtracts the mean
+score of the pair's distance stratum, and those means fall steadily with
+separation, so a pair competes only against others at a similar distance. It
+then divides by the pair's own standard error, which demotes large but poorly
+determined scores. In practice the second term does most of the reordering: the
+highest raw scores tend to be strongly expressed loci whose scores are also the
+least precisely estimated, and they drop sharply once divided by their error.
+
+## Cell-type-specific linkage
+
+Restricting the analysis to one population gives linkage specific to it, because
+whole-population scores are an average in which cell-type signal is diluted. The
+supported route is to fit that population:
+
+```r
+mono  <- colnames(obj)[obj$celltype == "CD14 Mono"]
+fit.m <- Polaris(X[mono, ], Y[mono, ], gene.chr.ref = anno, mc.cores = 4)
+tab.m <- SkymapZdev(SkymapLinkageTable(fit.m, gene.anno = anno, mc.cores = 4))
+```
+
+Note what does **not** work, because it fails quietly. Restricting
+`fit$skymap.cell` to a subset of cells and reusing the global fit leaves
+`score_raw` bit-for-bit unchanged, since the score is read from
+`skymap.feature.chr`, which `Polaris()` built once on all cells. The standard
+error does respond to the subset. On this dataset, restricting to the 721 CD14
+monocytes moves the median `SE` from 5.32 to 1.32 while every score stays
+identical, so the resulting `z_dev` divides a score computed on 3,000 cells by an
+error computed on 721. Nothing errors; the ranking is simply wrong. Fit the
+population instead, as above.
+
+The POLARIS paper's cell-type panels use a third route, reusing the global cell
+embedding and recomputing only the feature projection on the subset. That is not
+exposed by this package.
+
+## What to expect it to cost
+
+Measured on all 10,412 cells with 16 cores: preprocessing about 20 seconds, the
+fit about 8 minutes, the linkage table with standard errors about 4 minutes, and
+a peak memory footprint near 21 GB.
+
+Memory, not time, is the thing to plan around. It is dominated by the dense
+scaled RNA matrix, 2.8 GB here, and by the standard-error step, which
+reconstructs a cells-by-peaks block. Pass `se = FALSE` to skip that step when
+memory is tight, or subsample cells as suggested above. A 3,000-cell subsample
+runs in roughly two minutes with a much smaller footprint, which is a reasonable
+way to rehearse the workflow before committing to the full dataset.
+
+# Working from a Seurat object directly
 
 `RunPolaris()` assembles the arguments and returns the joint embedding as a
 `DimReduc`, so it drops into the usual Seurat workflow:
@@ -160,27 +380,22 @@ res$skymap <- SkymapSimScore(res$skymap)
 res$object$concordance <- res$skymap$concordance[colnames(res$object)]
 ```
 
-## Gene annotation
+It takes the layers POLARIS expects by default, `scale.data` for RNA and `data`
+for ATAC, transposes them for you, and picks up the annotation attached to the
+ATAC assay when there is one. `Polaris()` on plain matrices remains the
+reproducible entry point; this only assembles its arguments.
 
-The annotation must match the genome build the peaks were called against. The
-best source is the one already attached to your ATAC assay, which
-`RunPolaris()` picks up automatically:
+# The `x.sds` floor
 
-```r
-anno <- Signac::Annotation(obj[["ATAC"]])
-```
+`Polaris()` keeps features of $X$ whose standard deviation exceeds `x.sds`,
+default `0.95`, and features of $Y$ above `y.sds`, default `0`. The asymmetry is
+intentional: $X$ is expected to be z-scored, so a floor near 1 selects genes
+retaining appreciable variance, while $Y$ is on a different scale and only
+constant features are dropped.
 
-Otherwise use the bundled table, or build one for any other build:
-
-```r
-anno <- polarisTSSRef("hg38")
-anno <- polarisMakeTSSRef(EnsDb.Hsapiens.v86::EnsDb.Hsapiens.v86)
-anno <- polarisMakeTSSRef("path/to/genes.gtf.gz")
-```
-
-Strand matters. POLARIS places transcription start sites with a strand-aware
-resize, so an unstranded annotation gives every minus-strand gene the wrong end
-of the gene as its TSS. `polarisMakeTSSRef()` refuses input with no strand.
+**This default assumes $X$ is z-scored.** If you pass a log-normalized layer,
+almost every gene falls below the floor and the fit stops with an empty $X$.
+Pass `x.sds = 0` in that case, as the CITE-seq analyses do.
 
 # Beyond RNA and ATAC
 
@@ -199,21 +414,12 @@ P <- fit$skymap.P; Q <- fit$skymap.Q
 cosine <- (P / sqrt(rowSums(P^2))) %*% t(Q / sqrt(rowSums(Q^2)))
 ```
 
-# Cell-type-specific linkage from one global fit
-
-Because the joint embedding assigns a coordinate to every cell, feature
-projections can be recomputed on any subset of cells **without refitting**.
-Restricting $X$, $Y$ and $W$ to a population and passing them through the same
-score gives population-specific linkage. Whole-population scores reflect an
-average and carry little cell-type-specific signal; restricting to a cell type
-is what recovers cell-type-specific links.
-
 # Notes on performance
 
 `Polaris()` is CPU-only. Its dominant cost is the two truncated SVDs, which are
 BLAS-bound for a dense $X$. The difference between R's reference BLAS and a
-threaded one is large — on the order of 25x for that step — so linking R
-against OpenBLAS or Accelerate is the single most effective speedup available.
+threaded one is large, on the order of 25x for that step, so linking R against
+OpenBLAS or Accelerate is the single most effective speedup available.
 
 `mc.cores` parallelizes the per-chromosome decomposition with `mclapply`, which
 is fork-based and therefore serial on Windows.
