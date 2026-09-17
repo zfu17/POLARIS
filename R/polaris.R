@@ -126,12 +126,11 @@ Polaris <- function(X, Y,
 
   ## ---- feature filtering ---------------------------------------------------
   ## The pre-package code round-tripped both modalities through
-  ## SVT_SparseMatrix before computing column standard deviations. That was
-  ## unnecessary: MatrixGenerics::colSds dispatches on base matrices and on
-  ## dgCMatrix alike and returns identical values, so the conversion only cost
-  ## memory. It also relied on `colSds` resolving to the right namespace by
-  ## library() ordering, since matrixStats::colSds is not generic and errors on
-  ## any S4 matrix.
+  ## SVT_SparseMatrix before computing column standard deviations, which only
+  ## cost memory, and relied on `colSds` resolving to the right namespace by
+  ## library() attach order. .col_sds() now computes the standard deviation
+  ## directly for both classes, so the retained feature set no longer depends on
+  ## which Bioconductor release supplied colSds. See .col_sds() in utils.R.
   keep.x <- .col_sds(X) > x.sds
   keep.y <- .col_sds(Y) > y.sds
   if (!any(keep.x))

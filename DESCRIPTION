@@ -1,6 +1,6 @@
 Package: POLARIS
 Title: Concordance-Aware Integration of Paired Single-Cell Multiomic Data
-Version: 0.99.0
+Version: 0.99.1
 Authors@R: c(
     person("Ziqi", "Fu", email = "ziqi_fu@hsph.harvard.edu",
            role = c("aut", "cre")))
@@ -19,7 +19,7 @@ Description: POLARIS is a concordance-aware framework for paired single-cell
     tens of thousands of cells.
 License: MIT + file LICENSE
 Encoding: UTF-8
-Depends: R (>= 4.4.0)
+Depends: R (>= 4.2.0)
 Imports:
     methods,
     stats,
@@ -29,8 +29,6 @@ Imports:
     RSpectra,
     irlba,
     Matrix,
-    MatrixGenerics,
-    sparseMatrixStats,
     uwot,
     BiocNeighbors,
     GenomicRanges,

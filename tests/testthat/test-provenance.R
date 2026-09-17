@@ -11,8 +11,13 @@ test_that("polarisVersions reports POLARIS, R and the Imports", {
   expect_identical(v$package[1:2], c("POLARIS", "R"))
   expect_false(anyNA(v$version))
   ## the packages the core actually needs must appear
-  for (p in c("RSpectra", "irlba", "Matrix", "MatrixGenerics"))
+  for (p in c("RSpectra", "irlba", "Matrix", "BiocNeighbors", "uwot"))
     expect_true(p %in% v$package, info = p)
+  ## MatrixGenerics and sparseMatrixStats were dropped once .col_sds() computed
+  ## the standard deviation itself. Their colSds forwarded useNames = NA on
+  ## Bioconductor 3.16 and earlier, which matrixStats >= 1.0 rejects, so every
+  ## fit on R 4.2 or older failed. Guard against them creeping back.
+  expect_false(any(c("MatrixGenerics", "sparseMatrixStats") %in% v$package))
   ## base packages carry R's version and would be noise
   expect_false(any(c("methods", "stats", "utils", "parallel") %in% v$package))
   expect_gt(nrow(polarisVersions("all")), nrow(v))

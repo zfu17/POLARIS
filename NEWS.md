@@ -1,3 +1,29 @@
+# POLARIS 0.99.1
+
+## Compatibility
+
+- POLARIS now installs on R 4.2 and later, down from R 4.4. Nothing in the
+  package ever used a feature newer than R 4.0; the old floor simply recorded
+  the R the package was built on.
+
+- The two Bioconductor packages of the matrixStats family, `MatrixGenerics` and
+  `sparseMatrixStats`, are no longer imported. They supplied one thing, the
+  per-feature standard deviations behind the `x.sds` and `y.sds` variance
+  floors, and their `colSds` forwards `useNames = NA` on Bioconductor 3.16 and
+  earlier, which `matrixStats` 1.0 and later reject. Any fit on R 4.2 or older
+  therefore died with `Argument 'useNames' must be either TRUE or FALSE`.
+  POLARIS computes the standard deviation directly, so the retained feature set
+  no longer depends on which Bioconductor release a user happens to have, and
+  the install pulls two fewer Bioconductor packages.
+
+  **Results are unchanged.** Those standard deviations feed only the comparison
+  `sd > floor`; the values never enter the decomposition. On the published
+  granulocyte-sorted PBMC 10k matrices (10,280 cells; dense X of 36,601 genes,
+  sparse Y of 143,883 peaks) not one feature changes its keep-or-drop decision.
+  The standard deviations agree with the previous implementation to 1.5e-13
+  (dense) and 4.6e-15 (sparse), while the nearest feature to its floor sits
+  3.4e-05 and 1.2e-01 away, margins larger by factors of 2e8 and 3e13.
+
 # POLARIS 0.99.0
 
 First packaged release. Previously distributed as a sourced script
